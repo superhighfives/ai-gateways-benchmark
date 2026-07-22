@@ -27,6 +27,7 @@ import re
 import socket
 import ssl
 import statistics
+import subprocess
 import sys
 import time
 
@@ -49,6 +50,11 @@ def open_conn(ip, host):
     raw = socket.create_connection((ip, 443), timeout=TIMEOUT)
     tcp_ms = (now() - t0) * 1000
     ctx = ssl.create_default_context()  # fresh context: no session resumption
+    # Python 3.14 enables VERIFY_X509_STRICT by default, which rejects otherwise-
+    # trusted CAs that omit a keyUsage extension — e.g. corporate TLS-inspection
+    # roots like Cloudflare WARP's. Relax only that flag; trust-chain and hostname
+    # verification stay on.
+    ctx.verify_flags &= ~getattr(ssl, "VERIFY_X509_STRICT", 0)
     t1 = now()
     tls_sock = ctx.wrap_socket(raw, server_hostname=host)
     tls_ms = (now() - t1) * 1000
@@ -56,7 +62,27 @@ def open_conn(ip, host):
     return tls_sock, tcp_ms, tls_ms
 
 
-def build_request(gw, cfg):
+def gen_dynamic_headers(gw, cfg):
+    """Run a shell command per header to produce its value (e.g. a signed trace id).
+
+    Merges top-level `dynamic_headers` with the gateway's own. Generated fresh
+    per call, and always *before* connecting, so subprocess time never lands in
+    the latency numbers.
+    """
+    spec = {**cfg.get("dynamic_headers", {}), **gw.get("dynamic_headers", {})}
+    out = {}
+    for name, cmd in spec.items():
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=TIMEOUT)
+        if r.returncode != 0:
+            raise RuntimeError(f"dynamic header {name!r} failed: {(r.stderr or '').strip()[:200]}")
+        val = r.stdout.strip()
+        if not val:
+            raise RuntimeError(f"dynamic header {name!r} produced no value")
+        out[name] = val
+    return out
+
+
+def build_request(gw, cfg, dyn_headers=None):
     payload = {
         "model": gw["model"],
         "messages": [{"role": "user", "content": cfg["prompt"]}],
@@ -76,6 +102,8 @@ def build_request(gw, cfg):
     }
     for k, v in gw.get("extra_headers", {}).items():
         headers[k] = os.path.expandvars(v)
+    for k, v in (dyn_headers or {}).items():
+        headers[k] = v
     path = os.path.expandvars(gw["path"])
     head = f"POST {path} HTTP/1.1\r\n" + "".join(
         f"{k}: {v}\r\n" for k, v in headers.items()) + "\r\n"
@@ -122,10 +150,11 @@ def timed_request(sock, request):
 
 
 def run_cold(gw, cfg):
+    request = build_request(gw, cfg, gen_dynamic_headers(gw, cfg))  # before timing
     ip, dns_ms = resolve(gw["host"])
     sock, tcp_ms, tls_ms = open_conn(ip, gw["host"])
     try:
-        status, headers, ttfb, ttft, preview = timed_request(sock, build_request(gw, cfg))
+        status, headers, ttfb, ttft, preview = timed_request(sock, request)
     finally:
         sock.close()
     if status != 200:
@@ -152,15 +181,16 @@ def _drain(sock, quiet=0.4):
 
 
 def run_warm(gw, cfg):
+    warmup_req = build_request(gw, cfg, gen_dynamic_headers(gw, cfg))  # fresh trace per call
+    measured_req = build_request(gw, cfg, gen_dynamic_headers(gw, cfg))
     ip, _ = resolve(gw["host"])
     sock, _, _ = open_conn(ip, gw["host"])
     try:
-        request = build_request(gw, cfg)
-        status, _, _, _, preview = timed_request(sock, request)  # warmup, full read
+        status, _, _, _, preview = timed_request(sock, warmup_req)  # warmup, full read
         if status != 200:
             raise RuntimeError(f"warmup HTTP {status}: {preview[:200]}")
         _drain(sock)
-        status, headers, ttfb, ttft, preview = timed_request(sock, request)
+        status, headers, ttfb, ttft, preview = timed_request(sock, measured_req)
     finally:
         sock.close()
     if status != 200:
