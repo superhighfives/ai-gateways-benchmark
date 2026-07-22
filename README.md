@@ -35,9 +35,18 @@ cp .env.example .env                 # then add your API keys
 ```
 
 `config.json` accepts any OpenAI-compatible chat-completions endpoint, plus
-per-gateway overrides for auth header and extra headers (see the Cloudflare
-example, which uses the native AI Gateway [run API](https://developers.cloudflare.com/ai-gateway/usage/rest-api/)
-at `/ai/v1/messages`, routing through your account's default gateway).
+per-gateway overrides for auth header and extra headers. The example config
+compares three gateways (Vercel, OpenRouter, Cloudflare) against four
+provider-direct baselines (OpenAI, Anthropic, xAI, Workers AI), so you can see
+what each gateway adds over hitting the provider yourself.
+
+The Cloudflare entry uses the legacy OpenAI-compatible [unified API](https://developers.cloudflare.com/ai-gateway/usage/chat-completion/)
+at `/compat/chat/completions`, with the provider key passed inline via
+`Authorization` and the gateway authenticated via `cf-aig-authorization`.
+The Anthropic-direct entry uses the native `/v1/messages` API (`x-api-key`
+auth, `anthropic-version` header); everything else is plain
+`/v1/chat/completions`.
+
 `$VARS` in `path`, `auth_value`, and `extra_headers` are expanded from the
 environment.
 

@@ -175,6 +175,20 @@ def fmt(v):
     return f"{v:7.1f}" if v is not None else "      —"
 
 
+def ascii_table(headers, rows):
+    """Render a box-drawing grid with a separator between every row."""
+    cols = list(zip(*([headers] + rows)))
+    widths = [max(len(str(c)) for c in col) for col in cols]
+    rule = lambda l, m, r: l + m.join("─" * (w + 2) for w in widths) + r
+    row = lambda cells: "│ " + " │ ".join(
+        str(c).ljust(widths[i]) for i, c in enumerate(cells)) + " │"
+    out = [rule("┌", "┬", "┐"), row(headers), rule("├", "┼", "┤")]
+    for i, r in enumerate(rows):
+        out.append(row(r))
+        out.append(rule("└", "┴", "┘") if i == len(rows) - 1 else rule("├", "┼", "┤"))
+    return "\n".join(out)
+
+
 def main():
     cfg = json.load(open(sys.argv[1] if len(sys.argv) > 1 else "config.json"))
     gateways = cfg["gateways"]
@@ -215,6 +229,17 @@ def main():
         print(f"| {gw['name']} |{fmt(med(c,'dns'))} |{fmt(med(c,'tcp'))} |{fmt(med(c,'tls'))} "
               f"|{fmt(med(c,'ttfb'))} |{fmt(med(c,'ttft'))} |{fmt(med(c,'e2e'))} "
               f"|{fmt(med(w,'ttfb'))} |{fmt(med(w,'ttft'))} |")
+    cell = lambda v: f"{int(round(v))}ms" if v is not None else "—"
+    headers = ["TTFT end-to-end (medians)", "TTFB", "TTFT (cold)", "TTFT (warm)"]
+    rows = []
+    for gw in gateways:
+        c, w = results[gw["name"]]["cold"], results[gw["name"]]["warm"]
+        rows.append([gw["name"], cell(med(c, "ttfb")), cell(med(c, "ttft")), cell(med(w, "ttft"))])
+    print()
+    print(ascii_table(headers, rows))
+    print("cold = new connection (DNS+TCP+TLS) · warm = reused connection · "
+          f"medians of {cfg.get('runs_cold', 5)} cold + {cfg.get('runs_warm', 5)} warm")
+
     print("\nReceipts (one per gateway):")
     for gw in gateways:
         runs = results[gw["name"]]["cold"]

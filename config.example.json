@@ -20,9 +20,44 @@
     },
     {
       "name": "cloudflare",
+      "host": "gateway.ai.cloudflare.com",
+      "path": "/v1/$CLOUDFLARE_ACCOUNT_ID/$CLOUDFLARE_GATEWAY_ID/compat/chat/completions",
+      "model": "anthropic/claude-haiku-4-5",
+      "auth_value": "Bearer $ANTHROPIC_API_KEY",
+      "extra_headers": {
+        "cf-aig-authorization": "Bearer $CLOUDFLARE_API_TOKEN"
+      }
+    },
+    {
+      "name": "openai",
+      "host": "api.openai.com",
+      "path": "/v1/chat/completions",
+      "model": "gpt-4o-mini",
+      "auth_value": "Bearer $OPENAI_API_KEY"
+    },
+    {
+      "name": "anthropic",
+      "host": "api.anthropic.com",
+      "path": "/v1/messages",
+      "model": "claude-haiku-4-5",
+      "auth_header": "x-api-key",
+      "auth_value": "$ANTHROPIC_API_KEY",
+      "extra_headers": {
+        "anthropic-version": "2023-06-01"
+      }
+    },
+    {
+      "name": "xai",
+      "host": "api.x.ai",
+      "path": "/v1/chat/completions",
+      "model": "grok-4",
+      "auth_value": "Bearer $XAI_API_KEY"
+    },
+    {
+      "name": "workers-ai",
       "host": "api.cloudflare.com",
-      "path": "/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/v1/messages",
-      "model": "anthropic/claude-haiku-4.5",
+      "path": "/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/ai/v1/chat/completions",
+      "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
       "auth_value": "Bearer $CLOUDFLARE_API_TOKEN"
     }
   ]
