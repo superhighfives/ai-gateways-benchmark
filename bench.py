@@ -35,6 +35,7 @@ TIMEOUT = 20
 CONTENT_RE = re.compile(rb'"(?:content|text)"\s*:\s*"[^"]')
 END_MARKERS = (b"data: [DONE]", b'"type":"message_stop"', b"\r\n0\r\n\r\n")
 RECEIPT_HEADERS = ("x-vercel-id", "cf-ray", "x-request-id", "request-id", "x-amzn-requestid")
+TRACE_UI = "https://tracing.cfdata.org/trace/"  # cf-trace-id -> Jaeger
 
 now = time.perf_counter
 
@@ -80,6 +81,13 @@ def gen_dynamic_headers(gw, cfg):
             raise RuntimeError(f"dynamic header {name!r} produced no value")
         out[name] = val
     return out
+
+
+def trace_fields(dyn):
+    """Derive a Jaeger link from a generated cf-trace-id (trace id is the field
+    before the first colon of the signed value). Empty dict if none present."""
+    tid = dyn.get("cf-trace-id", "").split(":")[0]
+    return {"trace": TRACE_UI + tid} if tid else {}
 
 
 def build_request(gw, cfg, dyn_headers=None):
@@ -150,7 +158,8 @@ def timed_request(sock, request):
 
 
 def run_cold(gw, cfg):
-    request = build_request(gw, cfg, gen_dynamic_headers(gw, cfg))  # before timing
+    dyn = gen_dynamic_headers(gw, cfg)  # before timing
+    request = build_request(gw, cfg, dyn)
     ip, dns_ms = resolve(gw["host"])
     sock, tcp_ms, tls_ms = open_conn(ip, gw["host"])
     try:
@@ -166,6 +175,7 @@ def run_cold(gw, cfg):
         "ttfb": ttfb, "ttft": ttft,
         "e2e": dns_ms + tcp_ms + tls_ms + ttft,
         "receipts": {h: headers[h] for h in RECEIPT_HEADERS if h in headers},
+        **trace_fields(dyn),
     }
 
 
@@ -182,7 +192,8 @@ def _drain(sock, quiet=0.4):
 
 def run_warm(gw, cfg):
     warmup_req = build_request(gw, cfg, gen_dynamic_headers(gw, cfg))  # fresh trace per call
-    measured_req = build_request(gw, cfg, gen_dynamic_headers(gw, cfg))
+    dyn = gen_dynamic_headers(gw, cfg)
+    measured_req = build_request(gw, cfg, dyn)
     ip, _ = resolve(gw["host"])
     sock, _, _ = open_conn(ip, gw["host"])
     try:
@@ -199,7 +210,8 @@ def run_warm(gw, cfg):
         raise RuntimeError(f"HTTP 200 but no content token seen (reasoning-only?): {preview[:200]}")
     return {"ttfb": ttfb, "ttft": ttft,
             "conn": {h: headers[h] for h in ("connection", "keep-alive") if h in headers},
-            "receipts": {h: headers[h] for h in RECEIPT_HEADERS if h in headers}}
+            "receipts": {h: headers[h] for h in RECEIPT_HEADERS if h in headers},
+            **trace_fields(dyn)}
 
 
 def med(runs, key):
@@ -279,8 +291,13 @@ def main():
     print("\nReceipts (one per gateway):")
     for gw in gateways:
         runs = results[gw["name"]]["cold"]
-        if runs and runs[0]["receipts"]:
-            print(f"  {gw['name']}: {runs[0]['receipts']}")
+        if not runs:
+            continue
+        r0 = runs[0]
+        if r0.get("receipts"):
+            print(f"  {gw['name']}: {r0['receipts']}")
+        if r0.get("trace"):
+            print(f"    trace: {r0['trace']}")
     for gw in gateways:
         errs = results[gw["name"]]["errors"]
         if errs:

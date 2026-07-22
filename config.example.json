@@ -19,11 +19,41 @@
       "auth_value": "Bearer $OPENROUTER_API_KEY"
     },
     {
-      "name": "cloudflare",
+      "name": "cloudflare-gateway-anthropic",
       "host": "gateway.ai.cloudflare.com",
       "path": "/v1/$CLOUDFLARE_ACCOUNT_ID/$CLOUDFLARE_GATEWAY_ID/compat/chat/completions",
       "model": "anthropic/claude-haiku-4-5",
       "auth_value": "Bearer $ANTHROPIC_API_KEY",
+      "extra_headers": {
+        "cf-aig-authorization": "Bearer $CLOUDFLARE_API_TOKEN"
+      }
+    },
+    {
+      "name": "cloudflare-gateway-openai",
+      "host": "gateway.ai.cloudflare.com",
+      "path": "/v1/$CLOUDFLARE_ACCOUNT_ID/$CLOUDFLARE_GATEWAY_ID/compat/chat/completions",
+      "model": "openai/gpt-4o-mini",
+      "auth_value": "Bearer $OPENAI_API_KEY",
+      "extra_headers": {
+        "cf-aig-authorization": "Bearer $CLOUDFLARE_API_TOKEN"
+      }
+    },
+    {
+      "name": "cloudflare-gateway-xai",
+      "host": "gateway.ai.cloudflare.com",
+      "path": "/v1/$CLOUDFLARE_ACCOUNT_ID/$CLOUDFLARE_GATEWAY_ID/compat/chat/completions",
+      "model": "grok/grok-4",
+      "auth_value": "Bearer $XAI_API_KEY",
+      "extra_headers": {
+        "cf-aig-authorization": "Bearer $CLOUDFLARE_API_TOKEN"
+      }
+    },
+    {
+      "name": "cloudflare-gateway-workers-ai",
+      "host": "gateway.ai.cloudflare.com",
+      "path": "/v1/$CLOUDFLARE_ACCOUNT_ID/$CLOUDFLARE_GATEWAY_ID/compat/chat/completions",
+      "model": "workers-ai/@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      "auth_value": "Bearer $CLOUDFLARE_API_TOKEN",
       "extra_headers": {
         "cf-aig-authorization": "Bearer $CLOUDFLARE_API_TOKEN"
       }
