@@ -48,7 +48,11 @@ auth, `anthropic-version` header); everything else is plain
 `/v1/chat/completions`.
 
 `$VARS` in `path`, `auth_value`, and `extra_headers` are expanded from the
-environment.
+environment. Two more optional per-gateway (or top-level) knobs: `extra_body`
+merges extra fields into the JSON payload (e.g. `chat_template_kwargs` to turn
+off a reasoning model's thinking), and `dynamic_headers` maps a header name to
+a shell command whose stdout becomes the value, regenerated fresh per call and
+before the connection opens — handy for a per-request signed trace id.
 
 ## Run
 
