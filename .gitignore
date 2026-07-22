@@ -2,3 +2,5 @@
 config.json
 results-*.json
 __pycache__/
+archive/
+RESULTS.md
