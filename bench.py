@@ -57,12 +57,14 @@ def open_conn(ip, host):
 
 
 def build_request(gw, cfg):
-    body = json.dumps({
+    payload = {
         "model": gw["model"],
         "messages": [{"role": "user", "content": cfg["prompt"]}],
         "max_tokens": cfg["max_tokens"],
         "stream": True,
-    }).encode()
+    }
+    payload.update(gw.get("extra_body", {}))  # per-gateway body params (e.g. chat_template_kwargs)
+    body = json.dumps(payload).encode()
     headers = {
         "Host": gw["host"],
         gw.get("auth_header", "Authorization"): os.path.expandvars(gw["auth_value"]),
@@ -126,8 +128,10 @@ def run_cold(gw, cfg):
         status, headers, ttfb, ttft, preview = timed_request(sock, build_request(gw, cfg))
     finally:
         sock.close()
-    if status != 200 or ttft is None:
+    if status != 200:
         raise RuntimeError(f"HTTP {status}: {preview[:200]}")
+    if ttft is None:
+        raise RuntimeError(f"HTTP 200 but no content token seen (reasoning-only?): {preview[:200]}")
     return {
         "ip": ip, "dns": dns_ms, "tcp": tcp_ms, "tls": tls_ms,
         "ttfb": ttfb, "ttft": ttft,
@@ -159,8 +163,10 @@ def run_warm(gw, cfg):
         status, headers, ttfb, ttft, preview = timed_request(sock, request)
     finally:
         sock.close()
-    if status != 200 or ttft is None:
+    if status != 200:
         raise RuntimeError(f"HTTP {status}: {preview[:200]}")
+    if ttft is None:
+        raise RuntimeError(f"HTTP 200 but no content token seen (reasoning-only?): {preview[:200]}")
     return {"ttfb": ttfb, "ttft": ttft,
             "conn": {h: headers[h] for h in ("connection", "keep-alive") if h in headers},
             "receipts": {h: headers[h] for h in RECEIPT_HEADERS if h in headers}}
